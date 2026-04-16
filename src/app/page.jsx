@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+"use client"; import { useState, useEffect, useRef } from "react";
 
 /* ─── STRIPE LINKS ─── */
 const STRIPE_LINKS = {
