@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { CartSheet } from "@/components/layout/cart-sheet";
+import { TikTokPixel } from "@/components/analytics/tiktok-pixel";
 import { buildMetadata, organizationJsonLd } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-dvh antialiased">
+        <TikTokPixel />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <Header />
           <main>{children}</main>
