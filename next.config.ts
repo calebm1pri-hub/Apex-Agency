@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Emit a standalone server bundle for the Docker image.
+  output: "standalone",
   // Pin the workspace root so Turbopack doesn't infer a parent dir.
   turbopack: {
     root: __dirname,
