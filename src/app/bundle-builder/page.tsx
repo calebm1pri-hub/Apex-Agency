@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BundleBuilder } from "@/components/product/bundle-builder";
-import { getAllProducts } from "@/lib/products";
+import { fetchAllProducts } from "@/lib/commerce";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -11,7 +11,8 @@ export const metadata: Metadata = buildMetadata({
   keywords: ["build a makeup bundle", "custom makeup kit"],
 });
 
-export default function BundlePage() {
+export default async function BundlePage() {
+  const products = await fetchAllProducts();
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
       <header className="mb-8 text-center">
@@ -26,7 +27,7 @@ export default function BundlePage() {
           the more you save.
         </p>
       </header>
-      <BundleBuilder products={getAllProducts()} />
+      <BundleBuilder products={products} />
     </div>
   );
 }

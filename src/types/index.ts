@@ -1,7 +1,7 @@
 /**
  * Core domain types for Marnie.
- * These mirror what a Shopify Storefront product / Supabase row would look like,
- * so swapping mock data for live adapters requires no UI changes.
+ * These mirror what a Supabase `products` row looks like, so swapping seed
+ * data for the live commerce adapter requires no UI changes.
  */
 
 export type ProductCategory =

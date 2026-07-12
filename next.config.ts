@@ -9,11 +9,10 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   images: {
-    // Remote sources used for mock product/UGC imagery. Swap for your CDN
-    // (Shopify files, Supabase storage, etc.) in production.
+    // Remote sources used for product/UGC imagery. Swap for your CDN
+    // (Supabase Storage, etc.) in production.
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
-      { protocol: "https", hostname: "cdn.shopify.com" },
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "p16-sign.tiktokcdn-us.com" },
     ],

@@ -1,9 +1,9 @@
 import type { MetadataRoute } from "next";
-import { getAllProducts, categories } from "@/lib/products";
+import { fetchAllProducts, categories } from "@/lib/commerce";
 import { getAllPosts } from "@/lib/blog";
 import { absoluteUrl } from "@/lib/utils";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticRoutes = [
@@ -30,7 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.6,
     }));
 
-  const productRoutes = getAllProducts().map((p) => ({
+  const productRoutes = (await fetchAllProducts()).map((p) => ({
     url: absoluteUrl(`/products/${p.handle}`),
     lastModified: now,
     changeFrequency: "weekly" as const,

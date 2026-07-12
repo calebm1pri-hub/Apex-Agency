@@ -1,9 +1,9 @@
 import { SeedanceForm } from "@/components/admin/seedance-form";
-import { getAllProducts } from "@/lib/products";
+import { fetchAllProducts } from "@/lib/commerce";
 import { productNames } from "@/lib/generators";
 
-export default function SeedancePage() {
-  const names = productNames(getAllProducts());
+export default async function SeedancePage() {
+  const names = productNames(await fetchAllProducts());
   return (
     <div className="space-y-8">
       <header>

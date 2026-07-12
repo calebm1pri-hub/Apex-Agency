@@ -4,6 +4,56 @@
 -- NextAuth; these tables cover creators, seeding, referrals, UGC, loyalty, and
 -- the email list.
 
+-- ---------- Products (commerce source of truth) ----------
+-- Populate after provisioning by POSTing /api/admin/seed (upserts the in-repo
+-- seed catalog), then edit in /admin/products or here directly.
+create table if not exists products (
+  id text primary key,
+  handle text unique not null,
+  name text not null,
+  tagline text,
+  description text,
+  category text default 'sets',
+  price numeric not null default 0,
+  compare_at_price numeric,
+  currency text default 'USD',
+  images jsonb default '[]'::jsonb,
+  rating numeric default 5,
+  review_count int default 0,
+  stock int default 0,
+  ingredients text[],
+  how_to_use text[],
+  how_to_video_url text,
+  badges text[],
+  bestseller boolean default false,
+  tiktok_viral boolean default false,
+  bundle_eligible boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- ---------- Orders + line items ----------
+create table if not exists orders (
+  id text primary key,
+  email text,
+  status text default 'processing', -- processing | shipped | delivered | cancelled
+  channel text default 'Website',   -- Website | TikTok Shop
+  total numeric not null default 0,
+  currency text default 'USD',
+  tracking_url text,
+  stripe_session_id text,
+  created_at timestamptz default now()
+);
+
+create table if not exists order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id text references orders(id) on delete cascade,
+  product_handle text,
+  name text,
+  quantity int default 1,
+  price numeric default 0
+);
+
 -- ---------- Email subscribers (glow list) ----------
 create table if not exists subscribers (
   id uuid primary key default gen_random_uuid(),
@@ -87,6 +137,9 @@ create table if not exists seedance_scripts (
 );
 
 -- Helpful indexes
+create index if not exists idx_products_category on products(category);
+create index if not exists idx_products_handle on products(handle);
+create index if not exists idx_orders_email on orders(email);
 create index if not exists idx_creators_status on creators(status);
 create index if not exists idx_referrals_code on referrals(code);
 create index if not exists idx_ugc_status on ugc_submissions(status);
@@ -102,3 +155,9 @@ alter table loyalty_accounts enable row level security;
 -- Example policy: allow anonymous inserts to the glow list only.
 create policy "anon can subscribe" on subscribers
   for insert to anon with check (true);
+
+-- Products are public read (storefront). Writes go through the service role
+-- (server), which bypasses RLS — so no write policy is needed for the admin.
+alter table products enable row level security;
+create policy "public can read products" on products
+  for select to anon using (true);

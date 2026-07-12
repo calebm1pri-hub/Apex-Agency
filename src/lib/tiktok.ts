@@ -1,8 +1,8 @@
 /**
  * TikTok helpers: Pixel events + shoppable embeds.
  * The Pixel id is public (NEXT_PUBLIC_) and injected via <TikTokPixel/>.
- * Server-side Events API and Shop product sync are handled by Shopify's
- * TikTok channel — this module covers the on-site tracking + embeds.
+ * On-site tracking + shoppable embeds live here; product sync to TikTok Shop
+ * is managed in TikTok Seller Center (upload your catalog or connect a feed).
  */
 export const TIKTOK_PIXEL_ID = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
 export const TIKTOK_HANDLE = "@marnie.beauty";

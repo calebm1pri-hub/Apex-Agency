@@ -9,15 +9,15 @@ import { ProductReviews } from "@/components/product/product-reviews";
 import { BundleBuilder } from "@/components/product/bundle-builder";
 import { ProductCard } from "@/components/product/product-card";
 import {
-  getAllProducts,
-  getProductByHandle,
-  getRelatedProducts,
-} from "@/lib/products";
+  fetchAllProducts,
+  fetchProductByHandle,
+  fetchRelated,
+} from "@/lib/commerce";
 import { getReviews } from "@/lib/reviews";
 import { buildMetadata, productJsonLd } from "@/lib/seo";
 
-export function generateStaticParams() {
-  return getAllProducts().map((p) => ({ handle: p.handle }));
+export async function generateStaticParams() {
+  return (await fetchAllProducts()).map((p) => ({ handle: p.handle }));
 }
 
 export async function generateMetadata({
@@ -26,7 +26,7 @@ export async function generateMetadata({
   params: Promise<{ handle: string }>;
 }): Promise<Metadata> {
   const { handle } = await params;
-  const product = getProductByHandle(handle);
+  const product = await fetchProductByHandle(handle);
   if (!product) return buildMetadata({ title: "Not found" });
   return buildMetadata({
     title: product.name,
@@ -44,11 +44,12 @@ export default async function ProductPage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const product = getProductByHandle(handle);
+  const product = await fetchProductByHandle(handle);
   if (!product) notFound();
 
   const reviews = getReviews(product);
-  const related = getRelatedProducts(handle);
+  const related = await fetchRelated(handle);
+  const catalog = await fetchAllProducts();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -82,7 +83,7 @@ export default async function ProductPage({
 
       {/* Bundle builder cross-sell */}
       <div className="mt-16">
-        <BundleBuilder products={getAllProducts()} />
+        <BundleBuilder products={catalog} />
       </div>
 
       {/* Reviews */}

@@ -1,12 +1,13 @@
 import type { Product, UGCPost } from "@/types";
 
 /**
- * MOCK CATALOG — single source of truth until Shopify Storefront is wired.
- * `lib/shopify.ts` reads through these when no Storefront token is present,
- * so every page/component works offline and swaps to live data via one adapter.
+ * SEED CATALOG — the source of truth in demo mode, and the fallback whenever
+ * Supabase isn't configured. `lib/commerce.ts` reads through these, so every
+ * page/component works with zero config and swaps to live Supabase data via one
+ * adapter. Populate the live DB by POSTing /api/admin/seed (upserts this list).
  *
  * Images use Unsplash for realistic placeholders; replace with your product
- * photography (Shopify Files / Supabase Storage) before launch.
+ * photography (Supabase Storage or any CDN) before launch.
  */
 
 const img = (id: string, alt: string) => ({
@@ -303,7 +304,7 @@ export const ugcPosts: UGCPost[] = [
   },
 ];
 
-/* ---- Selectors (kept pure so the Shopify adapter can mirror them) ---- */
+/* ---- Selectors (pure; used for seed/fallback + client UI helpers) ---- */
 
 export function getAllProducts(): Product[] {
   return products;

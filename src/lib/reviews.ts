@@ -2,7 +2,7 @@ import type { Product, ProductReview } from "@/types";
 
 /**
  * Deterministic mock reviews per product (seeded by handle so SSR/CSR match).
- * Replace with real reviews from Shopify/Judge.me/Okendo via an adapter later.
+ * Replace with real reviews from your provider (Judge.me/Okendo/Supabase) later.
  */
 const SNIPPETS = [
   {

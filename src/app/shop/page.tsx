@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ProductCard } from "@/components/product/product-card";
 import { ShopFilters } from "@/components/product/shop-filters";
-import { getProductsByCategory, categories } from "@/lib/products";
+import { fetchByCategory, categories } from "@/lib/commerce";
 import { buildMetadata } from "@/lib/seo";
 import type { Product } from "@/types";
 
@@ -36,7 +36,7 @@ export default async function ShopPage({
   searchParams: Promise<{ category?: string; sort?: string }>;
 }) {
   const { category = "all", sort = "featured" } = await searchParams;
-  const products = sortProducts(getProductsByCategory(category), sort);
+  const products = sortProducts(await fetchByCategory(category), sort);
   const label = categories.find((c) => c.value === category)?.label ?? "All";
 
   return (

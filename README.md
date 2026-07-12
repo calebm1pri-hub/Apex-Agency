@@ -15,10 +15,10 @@ Built with **Next.js 15 (App Router) · TypeScript · Tailwind v4 · shadcn/ui**
 | **Content hub** | SEO blog with keyword-targeted articles, markdown renderer, article schema |
 | **TikTok** | Shoppable UGC feed, creator showcase, "Shop the Look", AR-effect CTA, on-site Pixel |
 | **Account** | Orders, wishlist, Glow Points loyalty (tiers + earn rules), referral program |
-| **Marketing/Admin hub** | Growth dashboard (KPIs, traffic chart, top-content ROI), creator seeding DB + sample tracker, **outreach email generator**, **Seedance UGC-script generator**, products + unified orders |
+| **Marketing/Admin hub** | Growth dashboard (KPIs, traffic chart, top-content ROI), creator seeding DB + sample tracker, **outreach email generator**, **Seedance UGC-script generator**, a working **product manager** (create/edit) + unified orders |
 | **Viral loops** | Referral ("share & get a free brush"), UGC-upload incentive, creator application |
 | **SEO** | Per-route metadata, `sitemap.ts`, `robots.ts`, Product/Article/Organization JSON-LD, `next/image` |
-| **Integrations** | Adapter layer for Shopify, Stripe, Supabase, Klaviyo, TikTok, Zapier — all with mock fallbacks |
+| **Commerce & integrations** | **Supabase-native** products/inventory/orders + adapter layer for Stripe, Klaviyo, TikTok, Zapier — all with seed/demo fallbacks |
 
 > **Runs with zero config.** Every integration ships in **demo mode** with realistic mock data, so `npm run dev` works immediately. Add API keys to go live one service at a time — the UI never changes.
 
@@ -49,10 +49,10 @@ npm run typecheck  # tsc --noEmit
 src/
   app/            # routes (home, shop, products/[handle], blog, tiktok, account, admin, api/*)
   components/     # ui (shadcn), layout, home, product, marketing, admin, account, providers
-  lib/            # adapters (shopify, stripe, supabase, klaviyo, tiktok, zapier)
-                  # + products/creators/orders mock data, seo, generators, stores, referral, loyalty
+  lib/            # commerce (Supabase-native catalog) + adapters (stripe, supabase,
+                  # klaviyo, tiktok, zapier) + seed data, seo, generators, stores, referral, loyalty
   types/          # shared domain types
-supabase/schema.sql   # tables for creators, referrals, ugc, loyalty, subscribers
+supabase/schema.sql   # tables for products, orders, creators, referrals, ugc, loyalty, subscribers
 Dockerfile · vercel.json · .env.example
 ```
 
@@ -62,11 +62,15 @@ Dockerfile · vercel.json · .env.example
 
 ## 🔌 Going live (one service at a time)
 
-Each adapter is guarded — missing keys = mock/demo mode with a `[stub]` log.
+Each adapter is guarded — missing keys = seed/demo mode with a `[stub]` log.
 
-1. **Shopify (products + TikTok Shop sync)** — set `SHOPIFY_STORE_DOMAIN` + `SHOPIFY_STOREFRONT_TOKEN`, then implement the `TODO(live)` GraphQL mappers in `src/lib/shopify.ts`. Connect the **TikTok Shop channel** inside Shopify admin so products, inventory, and orders sync both ways.
+1. **Supabase (commerce backend + custom data)** — run `supabase/schema.sql`, set the three `SUPABASE` vars, then seed the catalog once:
+   ```bash
+   curl -X POST https://yoursite.com/api/admin/seed -H "x-seed-token: $SEED_TOKEN"
+   ```
+   Products/inventory/orders, creator applications, referrals, and UGC now persist to Postgres. Manage products in **/admin/products** (create/edit writes straight to Supabase). The whole storefront reads through `src/lib/commerce.ts`.
 2. **Stripe (payments)** — set `STRIPE_SECRET_KEY`; checkout in `src/lib/stripe.ts` goes live automatically. Add `STRIPE_WEBHOOK_SECRET` and point a webhook at `/api/webhooks/stripe` for post-purchase flows.
-3. **Supabase (custom data)** — run `supabase/schema.sql`, set the three `*_SUPABASE_*` vars. Creator applications, referrals, and UGC start persisting.
+3. **TikTok Shop** — this site is your brand/SEO/UGC storefront; list your catalog in **TikTok Seller Center** (upload or connect a feed) to sell natively in-app. Orders from both surfaces surface in **/admin/orders**.
 4. **Klaviyo (email/SMS)** — set `KLAVIYO_PRIVATE_KEY` (+ `KLAVIYO_LIST_ID`) to activate welcome / abandoned-cart / post-purchase flows.
 5. **TikTok Pixel** — set `NEXT_PUBLIC_TIKTOK_PIXEL_ID`.
 6. **Zapier/Make** — set the per-workflow `ZAP_*_URL` webhooks (new order → notify creator, creator applied → CRM, UGC → repost, etc).
@@ -93,18 +97,18 @@ Uses Next.js `output: "standalone"` for a small image.
 
 ## 🎨 Brand & design
 
-Tokens live in `src/app/globals.css` (`@theme`): `blush`, `rose`, `nude`, `cream`, `noir` + `glow` shadows and gradient-text utilities. Dark-mode-first via `next-themes`. Fonts: Fraunces (display) + Inter (sans). The logo is an inline, theme-aware SVG wordmark (`src/components/layout/logo.tsx`) — swap in a raster mark by dropping a file in `/public` and updating that component. Replace the Unsplash placeholder imagery in `src/lib/products.ts` with your product photography before launch.
+Tokens live in `src/app/globals.css` (`@theme`): `blush`, `rose`, `nude`, `cream`, `noir` + `glow` shadows and gradient-text utilities. Dark-mode-first via `next-themes`. Fonts: Fraunces (display) + Inter (sans). The logo is an inline, theme-aware SVG wordmark (`src/components/layout/logo.tsx`) — swap in a raster mark by dropping a file in `/public` and updating that component. Replace the Unsplash placeholder imagery in `src/lib/products.ts` (the seed catalog) with your product photography, or upload it to Supabase Storage and edit products in `/admin/products`.
 
 ---
 
 ## 📈 30-Day TikTok Launch + Growth Plan
 
-A focused sprint to go from live site → early virality → repeatable sales. Assumes the storefront is deployed and Shopify + TikTok Shop are connected.
+A focused sprint to go from live site → early virality → repeatable sales. Assumes the storefront is deployed, Supabase is seeded, and your TikTok Shop is set up.
 
 ### Week 0 — Pre-launch setup (days 1–3)
-- Connect **Shopify ↔ TikTok Shop**; import 6–8 SKUs with the viral hero products first (lash clusters, cream blush, liner tool).
+- Provision Supabase (`schema.sql`), seed the catalog (`/api/admin/seed`), and add your 6–8 SKUs in **/admin/products** — lead with the viral heroes (lash clusters, cream blush, liner tool). List the same catalog in **TikTok Seller Center** for native in-app checkout.
 - Add real product photography + 3–5 vertical demo clips (drop `hero.mp4` in `/public`).
-- Install the **TikTok Pixel** + Shopify TikTok channel events. Set up Klaviyo welcome + abandoned-cart flows.
+- Install the **TikTok Pixel** + connect Stripe. Set up Klaviyo welcome + abandoned-cart flows.
 - Seed the **creator DB** (admin → Seeding) with 50 nano creators (1k–50k, >8% engagement) in your niche.
 - Enable the **referral** + **creator apply** loops. Turn on `GLOWUP` welcome discount.
 

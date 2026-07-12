@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/utils";
-import { getBestsellers } from "@/lib/products";
+import { useCatalog } from "@/lib/use-catalog";
 
 const FREE_SHIP_THRESHOLD = 35;
 
@@ -24,9 +24,10 @@ export function CartSheet() {
   const progress = Math.min(100, (total / FREE_SHIP_THRESHOLD) * 100);
 
   // Cross-sell: suggest a bestseller not already in the cart ("Complete Your Glow Kit")
-  const suggestion = getBestsellers().find(
-    (p) => !lines.some((l) => l.productId === p.id)
-  );
+  const catalog = useCatalog();
+  const suggestion = catalog
+    .filter((p) => p.bestseller)
+    .find((p) => !lines.some((l) => l.productId === p.id));
 
   return (
     <Sheet open={isOpen} onOpenChange={setOpen}>

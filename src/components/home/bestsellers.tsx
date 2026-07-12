@@ -1,10 +1,10 @@
 import { Section } from "@/components/home/section";
 import { ProductCard } from "@/components/product/product-card";
-import { getBestsellers } from "@/lib/products";
+import { fetchBestsellers } from "@/lib/commerce";
 
 /** Horizontally-scrollable bestseller carousel (snap on mobile). */
-export function Bestsellers() {
-  const products = getBestsellers();
+export async function Bestsellers() {
+  const products = await fetchBestsellers();
   return (
     <Section
       eyebrow="Fan favorites"
