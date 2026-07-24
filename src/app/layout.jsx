@@ -1,6 +1,13 @@
 export const metadata = {
-  title: "APEX — AI-Powered Marketing for South Florida Businesses",
-  description: "Get more customers with AI-powered content, automation, and lead generation. Starting at $500/month. No contracts.",
+  title: "Navigator — Perimenopause & Menopause Companion",
+  description:
+    "A private, on-device companion for perimenopause and menopause. Track symptoms, mood, sleep and HRT, forecast harder days, spot your patterns, and generate doctor-ready reports. Your data never leaves your device.",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#5b3a5b",
 };
 
 export default function RootLayout({ children }) {
