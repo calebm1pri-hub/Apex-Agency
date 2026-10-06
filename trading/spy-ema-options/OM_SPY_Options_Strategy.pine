@@ -112,7 +112,7 @@ f_bs(isCall, S, K, T, r, v) =>
 
 vix   = request.security("CBOE:VIX", timeframe.period, close, ignore_invalid_symbol=true)
 iv    = (useVIX and not na(vix) ? vix : ivFixed) / 100.0 * ivMult
-r     = riskFree / 100.0
+rfr   = riskFree / 100.0
 // Minutes until expiry (4:00pm NY on expiry day), floored at 5 min so price never collapses to 0 instantly
 f_T(daysLeft) => math.max((16 * 60 - nyMins) + daysLeft * 1440, 5) / 525600.0
 
@@ -135,7 +135,7 @@ var float lastMark  = na
 // Calendar-day number in New York time (used to count days held for DTE > 0)
 dayNum   = int(math.floor((time - timestamp("America/New_York", 2000, 1, 1, 0, 0)) / 86400000))
 daysHeld = inOpt ? dayNum - optDay : 0
-[mark, _d] = f_bs(optCall, close, inOpt ? optK : close, f_T(math.max(dte - daysHeld, 0)), r, iv)
+[mark, _d] = f_bs(optCall, close, inOpt ? optK : close, f_T(math.max(dte - daysHeld, 0)), rfr, iv)
 lastMark := inOpt ? mark : na
 
 callOK = direction != "Puts only" and (not useVWAPFilter or close > vwapV) and (not useBonusFilter or close > bonusMA)
@@ -177,7 +177,7 @@ if not inOpt and (goCall or goPut)
     bool  isCall = goCall
     float atm    = math.round(close)
     float K      = isCall ? atm + otmStrikes : atm - otmStrikes
-    [prem, dlt]  = f_bs(isCall, close, K, f_T(dte), r, iv)
+    [prem, dlt]  = f_bs(isCall, close, K, f_T(dte), rfr, iv)
     float cost   = prem + slipPerSide
     int   n      = sizeMode == "Fixed contracts" ? fixedCtr : int(math.floor(optEquity * pctAccount / 100 / (cost * 100)))
     if n >= 1 and optEquity > cost * 100 * n
