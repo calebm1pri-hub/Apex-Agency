@@ -1,0 +1,228 @@
+//@version=5
+// OM's MAs & Signals -> SPY options STRATEGY (for the TradingView Strategy Tester)
+// Based on ColeJustice's "SPY Moving Averages and Signals" v2.4 (OptionMillionaire's 8/21 EMA setup).
+//
+//   8 EMA crosses OVER  21 EMA  -> buy CALLS
+//   8 EMA crosses UNDER 21 EMA  -> buy PUTS
+//
+// HOW TO USE
+//   * Chart: AMEX:SPY, 5 minute, regular trading hours only (turn "Extended trading hours" OFF).
+//   * The Strategy Tester trades SPY shares sized to the option's delta exposure
+//     (contracts x 100 x delta), so the tester's curve approximates the option's directional P&L.
+//   * The table in the top-right corner is the actual OPTIONS simulation: each trade buys
+//     an ATM (or OTM) call/put, priced with Black-Scholes using VIX as implied volatility,
+//     includes theta decay, the bid/ask spread and commissions. USE THAT TABLE for "how much in options".
+//   * It's a model, not real fills. Real 0DTE IV/skew differ. Check results against real option
+//     prices (see alpaca_backtest.py) before you trade real money.
+
+strategy("OM 8/21 EMA - SPY Options Strategy", shorttitle="OM Options Strat", overlay=true,
+     initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=50,
+     commission_type=strategy.commission.cash_per_order, commission_value=0,
+     process_orders_on_close=true, pyramiding=0, max_labels_count=500)
+
+// ───────────── Inputs ─────────────
+grpS = "Signals"
+priceSource   = input.source(close, "Price Source", group=grpS)
+shortMAPeriod = input.int(8, "Short MA", group=grpS, inline="s")
+shortMAType   = input.string("EMA", "", options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group=grpS, inline="s")
+longMAPeriod  = input.int(21, "Long MA ", group=grpS, inline="l")
+longMAType    = input.string("EMA", "", options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group=grpS, inline="l")
+sigTF         = input.timeframe("", "Crossover MAs Timeframe (blank = chart)", group=grpS)
+direction     = input.string("Both", "Trade Direction", options=["Both","Calls only","Puts only"], group=grpS)
+useVWAPFilter = input.bool(false, "Filter: calls only above VWAP, puts only below", group=grpS)
+useBonusFilter= input.bool(false, "Filter: calls only above Bonus MA, puts only below", group=grpS)
+bonusPeriod   = input.int(34, "Bonus MA", group=grpS, inline="b")
+bonusType     = input.string("EMA", "", options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group=grpS, inline="b")
+
+grpT = "Time (New York)"
+entryWindow = input.session("0945-1530", "New entries allowed", group=grpT)
+flatHour    = input.int(15, "Close everything at  hour", minval=9, maxval=16, group=grpT, inline="f")
+flatMinute  = input.int(55, "min", minval=0, maxval=59, group=grpT, inline="f")
+startDate   = input.time(timestamp("01 Jan 2020 00:00 +0000"), "Backtest start", group=grpT)
+
+grpO = "Options model"
+dte          = input.int(0, "Days to expiration (0 = 0DTE)", minval=0, maxval=30, group=grpO)
+otmStrikes   = input.int(0, "Strikes out of the money ($1 strikes)", minval=0, maxval=10, group=grpO)
+useVIX       = input.bool(true, "Use VIX as implied volatility", group=grpO)
+ivFixed      = input.float(15.0, "Fixed IV % (if VIX off/unavailable)", minval=1, group=grpO)
+ivMult       = input.float(1.0, "IV multiplier", minval=0.1, step=0.05, group=grpO)
+riskFree     = input.float(4.5, "Risk-free rate %", group=grpO)
+slipPerSide  = input.float(0.02, "Half-spread / slippage per side ($ per option)", minval=0, step=0.01, group=grpO)
+commPerCtr   = input.float(0.0, "Commission per contract per side ($)", minval=0, step=0.05, group=grpO)
+
+grpR = "Risk / sizing"
+sizeMode     = input.string("Fixed contracts", "Position sizing", options=["Fixed contracts","% of account"], group=grpR)
+fixedCtr     = input.int(1, "Contracts (fixed mode)", minval=1, group=grpR)
+pctAccount   = input.float(10.0, "% of account per trade (% mode)", minval=0.5, maxval=100, group=grpR)
+useStop      = input.bool(true, "Stop loss", group=grpR, inline="sl")
+stopPct      = input.float(30.0, "% of premium", minval=1, group=grpR, inline="sl")
+useTarget    = input.bool(true, "Take profit", group=grpR, inline="tp")
+targetPct    = input.float(50.0, "% of premium", minval=1, group=grpR, inline="tp")
+exitOnCross  = input.bool(true, "Exit on opposite crossover", group=grpR)
+closeAtEOD   = input.bool(true, "Always close at end of day (day trading)", group=grpR)
+startCapital = strategy.initial_capital
+
+grpV = "Display"
+showVWAP  = input.bool(true, "Show VWAP", group=grpV)
+showBonus = input.bool(true, "Show Bonus MA", group=grpV)
+showTable = input.bool(true, "Show options results table", group=grpV)
+
+// ───────────── Moving averages ─────────────
+f_ma(src, len, typ) =>
+    switch typ
+        "EMA"  => ta.ema(src, len)
+        "SMA"  => ta.sma(src, len)
+        "WMA"  => ta.wma(src, len)
+        "HMA"  => ta.hma(src, len)
+        "ALMA" => ta.alma(src, len, 0.85, 6)
+        "LIN"  => ta.linreg(src, len, 0)
+        "ZLMA" => 2 * ta.wma(ta.wma(src, len), 3) - ta.wma(ta.wma(ta.wma(src, len), 3), len)
+        => na
+
+// Non-repainting higher-timeframe fetch (only used when a timeframe is selected)
+f_tf(expr) => sigTF == "" ? expr : request.security(syminfo.tickerid, sigTF, expr[1], lookahead=barmerge.lookahead_on)
+
+shortMA = f_tf(f_ma(priceSource, shortMAPeriod, shortMAType))
+longMA  = f_tf(f_ma(priceSource, longMAPeriod, longMAType))
+bonusMA = f_ma(priceSource, bonusPeriod, bonusType)
+vwapV   = ta.vwap(hlc3)
+
+bull = ta.crossover(shortMA, longMA)
+bear = ta.crossunder(shortMA, longMA)
+
+// ───────────── Time ─────────────
+nyMins   = hour(time_close, "America/New_York") * 60 + minute(time_close, "America/New_York")
+inWindow = not na(time(timeframe.period, entryWindow, "America/New_York")) and time >= startDate
+isEOD    = nyMins >= flatHour * 60 + flatMinute
+
+// ───────────── Black-Scholes ─────────────
+f_ncdf(x) =>
+    float t = 1.0 / (1.0 + 0.2316419 * math.abs(x))
+    float d = 0.3989422804014327 * math.exp(-x * x / 2.0)
+    float p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+    x >= 0 ? 1.0 - p : p
+
+f_bs(isCall, S, K, T, r, v) =>
+    float sq = v * math.sqrt(T)
+    float d1 = (math.log(S / K) + (r + 0.5 * v * v) * T) / sq
+    float d2 = d1 - sq
+    float px = isCall ? S * f_ncdf(d1) - K * math.exp(-r * T) * f_ncdf(d2) : K * math.exp(-r * T) * f_ncdf(-d2) - S * f_ncdf(-d1)
+    float dl = isCall ? f_ncdf(d1) : f_ncdf(d1) - 1.0
+    [math.max(px, 0.01), dl]
+
+vix   = request.security("CBOE:VIX", timeframe.period, close, ignore_invalid_symbol=true)
+iv    = (useVIX and not na(vix) ? vix : ivFixed) / 100.0 * ivMult
+r     = riskFree / 100.0
+// Minutes until expiry (4:00pm NY on expiry day), floored at 5 min so price never collapses to 0 instantly
+f_T(daysLeft) => math.max((16 * 60 - nyMins) + daysLeft * 1440, 5) / 525600.0
+
+// ───────────── Option position state ─────────────
+var bool  inOpt     = false
+var bool  optCall   = false
+var float optK      = na
+var float optEntry  = na     // premium paid incl. slippage
+var int   optCtr    = 0
+var int   optDay    = 0      // day number of entry
+var float optEquity = startCapital
+var float optPeak   = startCapital
+var float optMaxDD  = 0.0
+var int   nTrades   = 0
+var int   nWins     = 0
+var float grossWin  = 0.0
+var float grossLoss = 0.0
+var float lastMark  = na
+
+// Calendar-day number in New York time (used to count days held for DTE > 0)
+dayNum   = int(math.floor((time - timestamp("America/New_York", 2000, 1, 1, 0, 0)) / 86400000))
+daysHeld = inOpt ? dayNum - optDay : 0
+[mark, _d] = f_bs(optCall, close, inOpt ? optK : close, f_T(math.max(dte - daysHeld, 0)), r, iv)
+lastMark := inOpt ? mark : na
+
+callOK = direction != "Puts only" and (not useVWAPFilter or close > vwapV) and (not useBonusFilter or close > bonusMA)
+putOK  = direction != "Calls only" and (not useVWAPFilter or close < vwapV) and (not useBonusFilter or close < bonusMA)
+goCall = bull and callOK and inWindow and not isEOD
+goPut  = bear and putOK  and inWindow and not isEOD
+
+// ── Exits ──
+string exitWhy = na
+if inOpt
+    if useStop and mark <= optEntry * (1 - stopPct / 100)
+        exitWhy := "Stop"
+    else if useTarget and mark >= optEntry * (1 + targetPct / 100)
+        exitWhy := "Target"
+    else if exitOnCross and ((optCall and bear) or (not optCall and bull))
+        exitWhy := "Cross"
+    else if isEOD and (closeAtEOD or dte - daysHeld <= 0)
+        exitWhy := "EOD"
+
+if inOpt and not na(exitWhy)
+    float exitPx = math.max(mark - slipPerSide, 0.0)
+    float pnl    = (exitPx - optEntry) * 100 * optCtr - commPerCtr * 2 * optCtr
+    optEquity += pnl
+    nTrades   += 1
+    if pnl > 0
+        nWins    += 1
+        grossWin += pnl
+    else
+        grossLoss += -pnl
+    optPeak  := math.max(optPeak, optEquity)
+    optMaxDD := math.max(optMaxDD, optPeak - optEquity)
+    inOpt := false
+    // If we are about to reverse, strategy.entry below closes the old side itself
+    if not ((optCall and goPut) or (not optCall and goCall))
+        strategy.close_all(comment=exitWhy + " $" + str.tostring(pnl, "#.##"))
+
+// ── Entries ──
+if not inOpt and (goCall or goPut)
+    bool  isCall = goCall
+    float atm    = math.round(close)
+    float K      = isCall ? atm + otmStrikes : atm - otmStrikes
+    [prem, dlt]  = f_bs(isCall, close, K, f_T(dte), r, iv)
+    float cost   = prem + slipPerSide
+    int   n      = sizeMode == "Fixed contracts" ? fixedCtr : int(math.floor(optEquity * pctAccount / 100 / (cost * 100)))
+    if n >= 1 and optEquity > cost * 100 * n
+        inOpt    := true
+        optCall  := isCall
+        optK     := K
+        optEntry := cost
+        optCtr   := n
+        optDay   := dayNum
+        int shares = math.max(1, int(math.round(math.abs(dlt) * 100 * n)))
+        string tag = (isCall ? "C " : "P ") + str.tostring(K) + " @" + str.tostring(cost, "#.##") + " x" + str.tostring(n)
+        strategy.entry(isCall ? "Calls" : "Puts", isCall ? strategy.long : strategy.short, qty=shares, comment=tag)
+
+// ───────────── Plots (same look as the original indicator) ─────────────
+trendColor = shortMA > longMA ? color.new(color.green, 85) : shortMA < longMA ? color.new(color.red, 85) : color.new(color.blue, 85)
+p1 = plot(shortMA, "Short MA", color=#FF00FF, linewidth=2)
+p2 = plot(longMA,  "Long MA",  color=#00FF00, linewidth=1)
+fill(p1, p2, color=trendColor)
+plot(showBonus ? bonusMA : na, "Bonus MA", color=#FFFF00)
+plot(showVWAP ? vwapV : na, "VWAP", color=color.new(color.white, 60), style=plot.style_circles)
+plotshape(bull, "Calls signal", shape.labelup,   location.belowbar, color.new(color.green, 25), text="Calls", textcolor=color.white)
+plotshape(bear, "Puts signal",  shape.labeldown, location.abovebar, color.new(color.red, 25),   text="Puts",  textcolor=color.white)
+
+if goCall
+    alert("Calls: 8ema crossed over 21ema", alert.freq_once_per_bar_close)
+if goPut
+    alert("Puts: 8ema crossed under 21ema", alert.freq_once_per_bar_close)
+
+// ───────────── Options results table ─────────────
+var table tb = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 15), border_width=1)
+f_row(i, k, v, c) =>
+    table.cell(tb, 0, i, k, text_color=color.silver, text_size=size.small, text_halign=text.align_left)
+    table.cell(tb, 1, i, v, text_color=c, text_size=size.small, text_halign=text.align_right)
+
+if showTable and barstate.islast
+    float net = optEquity - startCapital
+    color nc  = net >= 0 ? color.lime : color.red
+    f_row(0, "SPY OPTIONS SIM", (dte == 0 ? "0DTE" : str.tostring(dte) + "DTE") + (otmStrikes > 0 ? " " + str.tostring(otmStrikes) + " OTM" : " ATM"), color.white)
+    f_row(1, "Start capital", "$" + str.tostring(startCapital, "#,###"), color.white)
+    f_row(2, "Ending equity", "$" + str.tostring(optEquity, "#,###.##"), nc)
+    f_row(3, "Net P&L", "$" + str.tostring(net, "#,###.##"), nc)
+    f_row(4, "Return", str.tostring(net / startCapital * 100, "#.##") + "%", nc)
+    f_row(5, "Trades", str.tostring(nTrades), color.white)
+    f_row(6, "Win rate", nTrades > 0 ? str.tostring(nWins / nTrades * 100, "#.#") + "%" : "-", color.white)
+    f_row(7, "Avg win / avg loss", (nWins > 0 ? "$" + str.tostring(grossWin / nWins, "#.##") : "-") + " / " + (nTrades - nWins > 0 ? "$" + str.tostring(grossLoss / (nTrades - nWins), "#.##") : "-"), color.white)
+    f_row(8, "Profit factor", grossLoss > 0 ? str.tostring(grossWin / grossLoss, "#.##") : "-", color.white)
+    f_row(9, "Max drawdown", "$" + str.tostring(optMaxDD, "#,###.##"), color.orange)
+    f_row(10, "Open", inOpt ? (optCall ? "CALL " : "PUT ") + str.tostring(optK) + " mark " + str.tostring(lastMark, "#.##") : "flat", color.white)
